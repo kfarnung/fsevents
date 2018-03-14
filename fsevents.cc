@@ -5,8 +5,6 @@
 
 #include "napi.h"
 #include "uv.h"
-#include "uv.h"
-#include "v8.h"
 #include "pthread.h"
 #include "CoreFoundation/CoreFoundation.h"
 #include "CoreServices/CoreServices.h"
@@ -15,9 +13,9 @@
 
 #include "src/storage.cc"
 namespace fse {
-  class FSEvents : public node::ObjectWrap {
+  class FSEvents : public Napi::ObjectWrap<FSEvents> {
   public:
-    FSEvents(const char *path, Napi::FunctionReference *handler);
+    FSEvents(const Napi::CallbackInfo& info);
     ~FSEvents();
 
     // locking.cc
@@ -42,35 +40,42 @@ namespace fse {
     void threadStop();
 
     // methods.cc - internal
-    Napi::FunctionReference *handler;
+    Napi::Env env;
+    Napi::FunctionReference handler;
     void emitEvent(const char *path, UInt32 flags, UInt64 id);
 
     // Common
     CFArrayRef paths;
     std::vector<fse_event*> events;
-    static void Initialize(v8::Handle<v8::Object> exports);
+    static void Initialize(Napi::Env env, Napi::Object exports);
 
     // methods.cc - exposed
-    static Napi::Value New(const Napi::CallbackInfo& info);
-    static Napi::Value Stop(const Napi::CallbackInfo& info);
-    static Napi::Value Start(const Napi::CallbackInfo& info);
+    Napi::Value Start(const Napi::CallbackInfo& info);
+    Napi::Value Stop(const Napi::CallbackInfo& info);
 
   };
 }
 
 using namespace fse;
 
-FSEvents::FSEvents(const char *path, Napi::FunctionReference *handler): handler(handler) {
-  CFStringRef dirs[] = { CFStringCreateWithCString(NULL, path, kCFStringEncodingUTF8) };
+FSEvents::FSEvents(const Napi::CallbackInfo& info) :
+    Napi::ObjectWrap<FSEvents>(info),
+    lockStarted(false),
+    thread(NULL),
+    threadloop(NULL),
+    env(info.Env()),
+    handler(Napi::Persistent(info[1].As<Napi::Function>())),
+    paths(NULL) {
+  std::string path(info[0].As<Napi::String>());
+  CFStringRef dirs[] = { CFStringCreateWithCString(NULL, path.c_str(), kCFStringEncodingUTF8) };
   paths = CFArrayCreate(NULL, (const void **)&dirs, 1, NULL);
-  threadloop = NULL;
+
   lockingStart();
 }
+
 FSEvents::~FSEvents() {
   std::cout << "YIKES" << std::endl;
   lockingStop();
-  delete handler;
-  handler = NULL;
 
   CFRelease(paths);
 }
@@ -85,19 +90,18 @@ FSEvents::~FSEvents() {
 #include "src/constants.cc"
 #include "src/methods.cc"
 
-void FSEvents::Initialize(v8::Handle<v8::Object> exports) {
-  Napi::FunctionReference tpl = Napi::Function::New(env, FSEvents::New);
-  tpl->SetClassName(Napi::String::New(env, "FSEvents"));
+void FSEvents::Initialize(Napi::Env env, Napi::Object exports) {
+  exports.Set("FSEvents", DefineClass(env, "FSEvents", {
+    InstanceMethod("start", &FSEvents::Start, napi_enumerable),
+    InstanceMethod("stop", &FSEvents::Stop, napi_enumerable)
+  }));
 
-  tpl->PrototypeTemplate().Set(
-           Napi::String::New(env, "start"),
-           Napi::Function::New(env, FSEvents::Start));
-  tpl->PrototypeTemplate().Set(
-           Napi::String::New(env, "stop"),
-           Napi::Function::New(env, FSEvents::Stop));
-  exports.Set(Napi::String::New(env, "Constants"), Constants());
-  exports.Set(Napi::String::New(env, "FSEvents"),
-               tpl->GetFunction());
+  exports.Set("Constants", Constants(env));
 }
 
-NODE_API_MODULE(fse, FSEvents::Initialize)
+Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
+  FSEvents::Initialize(env, exports);
+  return exports;
+}
+
+NODE_API_MODULE(fse, Initialize)
