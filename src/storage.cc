@@ -8,20 +8,31 @@ struct fse_event {
   UInt32 flags;
   CFStringRef path;
   
-  fse_event(CFStringRef eventPath, UInt32 eventFlag, UInt64 eventId) {
-    this->path = eventPath;
-    this->flags = eventFlag;
-    this->id = eventId;
-    if (this->path != NULL)
-      CFRetain(this->path);
+  fse_event(CFStringRef eventPath, UInt32 eventFlag, UInt64 eventId) :
+      id(eventId),
+      flags(eventFlag),
+      path(eventPath) {
+    
+    if (path != nullptr) {
+      CFRetain(path);
+    }
   }
   
   ~fse_event() {
-    if (this->path != NULL)
-      CFRelease(this->path);
+    if (path != nullptr) {
+      CFRelease(path);
+    }
+  }
+
+  fse_event(fse_event&& other) :
+      fse_event() {
+    std::swap(id, other.id);
+    std::swap(flags, other.flags);
+    std::swap(path, other.path);
   }
 
 private:
+  fse_event() : fse_event(nullptr, 0, 0) {}
   fse_event(const fse_event&);
   void operator=(const fse_event&);
 };

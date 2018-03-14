@@ -29,31 +29,34 @@
 #endif
 
 void FSEvents::threadStart() {
-  if (threadloop) return;
-  pthread_create(&thread, NULL, &FSEvents::threadRun, this);
+  if (threadloop) {
+    return;
+  }
+
+  pthread_create(&thread, nullptr, &FSEvents::threadRun, this);
 }
 
-void HandleStreamEvents(ConstFSEventStreamRef stream, void *ctx, size_t numEvents, void *eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId eventIds[]) {
-  FSEvents * fse = (FSEvents *)ctx;
-  size_t idx;
+void FSEvents::HandleStreamEvents(ConstFSEventStreamRef stream, void *ctx, size_t numEvents, void *eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId eventIds[]) {
+  FSEvents* fse = static_cast<FSEvents*>(ctx);
+  
   fse->lock();
-  for (idx=0; idx < numEvents; idx++) {
-    fse_event *event = new fse_event(
-        (CFStringRef)CFArrayGetValueAtIndex((CFArrayRef)eventPaths, idx),
-        eventFlags[idx],
-        eventIds[idx]
-      );
-    fse->events.push_back(event);
+  
+  for (size_t idx = 0; idx < numEvents; idx++) {
+    fse->events.emplace_back(
+      (CFStringRef)CFArrayGetValueAtIndex((CFArrayRef)eventPaths, idx),
+      eventFlags[idx],
+      eventIds[idx]);
   }
+  
   fse->asyncTrigger();
   fse->unlock();
 }
 
 void *FSEvents::threadRun(void *ctx) {
-  FSEvents *fse = (FSEvents*)ctx;
-  FSEventStreamContext context = { 0, ctx, NULL, NULL, NULL };
+  FSEvents* fse = static_cast<FSEvents*>(ctx);
+  FSEventStreamContext context = { 0, ctx, nullptr, nullptr, nullptr };
   fse->threadloop = CFRunLoopGetCurrent();
-  FSEventStreamRef stream = FSEventStreamCreate(NULL, &HandleStreamEvents, &context, fse->paths, kFSEventStreamEventIdSinceNow, (CFAbsoluteTime) 0.1, kFSEventStreamCreateFlagNone | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes);
+  FSEventStreamRef stream = FSEventStreamCreate(nullptr, &FSEvents::HandleStreamEvents, &context, fse->paths, kFSEventStreamEventIdSinceNow, (CFAbsoluteTime) 0.1, kFSEventStreamCreateFlagNone | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes);
   FSEventStreamScheduleWithRunLoop(stream, fse->threadloop, kCFRunLoopDefaultMode);
   FSEventStreamStart(stream);
   CFRunLoopRun();
@@ -61,12 +64,15 @@ void *FSEvents::threadRun(void *ctx) {
   FSEventStreamUnscheduleFromRunLoop(stream, fse->threadloop, kCFRunLoopDefaultMode);
   FSEventStreamInvalidate(stream);
   FSEventStreamRelease(stream);
-  fse->threadloop = NULL;
-  return NULL;
+  fse->threadloop = nullptr;
+  return nullptr;
 }
 
 void FSEvents::threadStop() {
-  if (!threadloop) return;
+  if (!threadloop) {
+    return;
+  }
+
   CFRunLoopStop(threadloop);
-  pthread_join(thread, NULL);
+  pthread_join(thread, nullptr);
 }

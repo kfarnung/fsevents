@@ -4,7 +4,10 @@
 */
 
 void FSEvents::emitEvent(const char *path, UInt32 flags, UInt64 id) {
-  if (!handler) return;
+  if (!handler) {
+    return;
+  }
+  
   Napi::HandleScope handle_scope(env);
   handler.Call({
     Napi::String::New(env, path),
@@ -13,16 +16,16 @@ void FSEvents::emitEvent(const char *path, UInt32 flags, UInt64 id) {
   });
 }
 
-Napi::Value FSEvents::Stop(const Napi::CallbackInfo& info) {
-  threadStop();
-  asyncStop();
+Napi::Value FSEvents::Start(const Napi::CallbackInfo& info) {
+  asyncStart();
+  threadStart();
 
   return info.This();
 }
 
-Napi::Value FSEvents::Start(const Napi::CallbackInfo& info) {
-  asyncStart();
-  threadStart();
+Napi::Value FSEvents::Stop(const Napi::CallbackInfo& info) {
+  threadStop();
+  asyncStop();
 
   return info.This();
 }

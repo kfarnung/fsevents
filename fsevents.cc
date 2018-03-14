@@ -15,44 +15,46 @@
 namespace fse {
   class FSEvents : public Napi::ObjectWrap<FSEvents> {
   public:
+    static void Initialize(Napi::Env env, Napi::Object exports);
+
     FSEvents(const Napi::CallbackInfo& info);
     ~FSEvents();
 
+    // methods.cc - exposed
+    Napi::Value Start(const Napi::CallbackInfo& info);
+    Napi::Value Stop(const Napi::CallbackInfo& info);
+
+  private:
     // locking.cc
-    bool lockStarted;
-    pthread_mutex_t lockmutex;
     void lockingStart();
     void lock();
     void unlock();
     void lockingStop();
 
     // async.cc
-    uv_async_t async;
+    static void async_propagate(uv_async_t *async);
     void asyncStart();
     void asyncTrigger();
     void asyncStop();
 
     // thread.cc
-    pthread_t thread;
-    CFRunLoopRef threadloop;
+    static void HandleStreamEvents(ConstFSEventStreamRef stream, void *ctx, size_t numEvents, void *eventPaths, const FSEventStreamEventFlags eventFlags[], const FSEventStreamEventId eventIds[]);
     void threadStart();
     static void *threadRun(void *ctx);
     void threadStop();
 
     // methods.cc - internal
-    Napi::Env env;
-    Napi::FunctionReference handler;
     void emitEvent(const char *path, UInt32 flags, UInt64 id);
 
-    // Common
+    uv_async_t async;
+    Napi::Env env;
+    std::vector<fse_event> events;
+    Napi::FunctionReference handler;
+    pthread_mutex_t lockmutex;
+    bool lockStarted;
     CFArrayRef paths;
-    std::vector<fse_event*> events;
-    static void Initialize(Napi::Env env, Napi::Object exports);
-
-    // methods.cc - exposed
-    Napi::Value Start(const Napi::CallbackInfo& info);
-    Napi::Value Stop(const Napi::CallbackInfo& info);
-
+    pthread_t thread;
+    CFRunLoopRef threadloop;
   };
 }
 
@@ -60,23 +62,21 @@ using namespace fse;
 
 FSEvents::FSEvents(const Napi::CallbackInfo& info) :
     Napi::ObjectWrap<FSEvents>(info),
-    lockStarted(false),
-    thread(NULL),
-    threadloop(NULL),
     env(info.Env()),
     handler(Napi::Persistent(info[1].As<Napi::Function>())),
-    paths(NULL) {
+    lockStarted(false),
+    paths(nullptr),
+    thread(nullptr),
+    threadloop(nullptr) {
   std::string path(info[0].As<Napi::String>());
-  CFStringRef dirs[] = { CFStringCreateWithCString(NULL, path.c_str(), kCFStringEncodingUTF8) };
-  paths = CFArrayCreate(NULL, (const void **)&dirs, 1, NULL);
+  CFStringRef dirs[] = { CFStringCreateWithCString(nullptr, path.c_str(), kCFStringEncodingUTF8) };
+  paths = CFArrayCreate(nullptr, (const void **)&dirs, 1, nullptr);
 
   lockingStart();
 }
 
 FSEvents::~FSEvents() {
-  std::cout << "YIKES" << std::endl;
   lockingStop();
-
   CFRelease(paths);
 }
 
