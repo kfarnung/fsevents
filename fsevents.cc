@@ -3,7 +3,8 @@
 ** Licensed under MIT License.
 */
 
-#include "nan.h"
+#include "napi.h"
+#include "uv.h"
 #include "uv.h"
 #include "v8.h"
 #include "pthread.h"
@@ -16,7 +17,7 @@
 namespace fse {
   class FSEvents : public node::ObjectWrap {
   public:
-    FSEvents(const char *path, Nan::Callback *handler);
+    FSEvents(const char *path, Napi::FunctionReference *handler);
     ~FSEvents();
 
     // locking.cc
@@ -41,7 +42,7 @@ namespace fse {
     void threadStop();
 
     // methods.cc - internal
-    Nan::Callback *handler;
+    Napi::FunctionReference *handler;
     void emitEvent(const char *path, UInt32 flags, UInt64 id);
 
     // Common
@@ -50,16 +51,16 @@ namespace fse {
     static void Initialize(v8::Handle<v8::Object> exports);
 
     // methods.cc - exposed
-    static NAN_METHOD(New);
-    static NAN_METHOD(Stop);
-    static NAN_METHOD(Start);
+    static Napi::Value New(const Napi::CallbackInfo& info);
+    static Napi::Value Stop(const Napi::CallbackInfo& info);
+    static Napi::Value Start(const Napi::CallbackInfo& info);
 
   };
 }
 
 using namespace fse;
 
-FSEvents::FSEvents(const char *path, Nan::Callback *handler): handler(handler) {
+FSEvents::FSEvents(const char *path, Napi::FunctionReference *handler): handler(handler) {
   CFStringRef dirs[] = { CFStringCreateWithCString(NULL, path, kCFStringEncodingUTF8) };
   paths = CFArrayCreate(NULL, (const void **)&dirs, 1, NULL);
   threadloop = NULL;
@@ -85,18 +86,18 @@ FSEvents::~FSEvents() {
 #include "src/methods.cc"
 
 void FSEvents::Initialize(v8::Handle<v8::Object> exports) {
-  v8::Local<v8::FunctionTemplate> tpl = Nan::New<v8::FunctionTemplate>(FSEvents::New);
-  tpl->SetClassName(Nan::New<v8::String>("FSEvents").ToLocalChecked());
-  tpl->InstanceTemplate()->SetInternalFieldCount(1);
-  tpl->PrototypeTemplate()->Set(
-           Nan::New<v8::String>("start").ToLocalChecked(),
-           Nan::New<v8::FunctionTemplate>(FSEvents::Start));
-  tpl->PrototypeTemplate()->Set(
-           Nan::New<v8::String>("stop").ToLocalChecked(),
-           Nan::New<v8::FunctionTemplate>(FSEvents::Stop));
-  exports->Set(Nan::New<v8::String>("Constants").ToLocalChecked(), Constants());
-  exports->Set(Nan::New<v8::String>("FSEvents").ToLocalChecked(),
+  Napi::FunctionReference tpl = Napi::Function::New(env, FSEvents::New);
+  tpl->SetClassName(Napi::String::New(env, "FSEvents"));
+
+  tpl->PrototypeTemplate().Set(
+           Napi::String::New(env, "start"),
+           Napi::Function::New(env, FSEvents::Start));
+  tpl->PrototypeTemplate().Set(
+           Napi::String::New(env, "stop"),
+           Napi::Function::New(env, FSEvents::Stop));
+  exports.Set(Napi::String::New(env, "Constants"), Constants());
+  exports.Set(Napi::String::New(env, "FSEvents"),
                tpl->GetFunction());
 }
 
-NODE_MODULE(fse, FSEvents::Initialize)
+NODE_API_MODULE(fse, FSEvents::Initialize)

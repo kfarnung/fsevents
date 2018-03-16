@@ -4,7 +4,8 @@
   "description": "Native Access to Mac OS-X FSEvents",
   "main": "fsevents.js",
   "dependencies": {
-    "nan": "^2.3.0",
+    "node-addon-api": "1.2.0",
+    "node-addon-api": "^1.2.0",
     "node-pre-gyp": "^0.6.39"
   },
   "os": [
